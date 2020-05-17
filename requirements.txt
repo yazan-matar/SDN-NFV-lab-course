@@ -1,0 +1,6 @@
+IPython >= 7.13.0
+lxml >= 4.5.0
+ncclient >= 0.6.7
+paramiko >= 2.6.0
+path >= 13.2.0
+requests >= 2.23.0
