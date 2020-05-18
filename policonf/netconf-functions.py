@@ -9,9 +9,8 @@ from ncclient.manager import connect as ncconnect
 
 
 # Other libraries
-# import re
-# import xml.etree.ElementTree as ET
-from lxml.etree import tounicode
+from lxml import etree
+# from lxml.etree import tounicode
 from ncclient.xml_ import to_ele, to_xml
 import questionary
 
@@ -38,9 +37,6 @@ def choose_host():
             '10.11.12.19',
             '10.11.12.23'
         ]).ask()
-    print("======================================================================")
-    print(type(host))
-    print("======================================================================")
     return host
 
 
@@ -48,16 +44,20 @@ def choose_host():
 @course_function(shortcut='0')
 def get_frequency_and_power():
     """Get frequency and power."""
-    print('************************************************************************')
+    print(100*'*')
     LOG.info("Starting...")
-    print('************************************************************************')
+    print(100*'*')
 
     host = choose_host()
 
-    if host == '10.11.12.19':
-        interface_name = '1/2/n2'
-    else:
-        interface_name = '1/2/n1'
+    interface_name = questionary.select(
+        "Please choose a host:",
+        choices=[
+            '1/2/n1',
+            '1/2/n2',
+            '1/2/c1',
+            '1/2/c3'
+        ]).ask()
 
     interface_filter = '''
         <managed-element>
@@ -67,45 +67,40 @@ def get_frequency_and_power():
     	    </interface>
         </managed-element>
     '''
-    print('************************************************************************')
+    print(100*'*')
     LOG.info("Connecting to " + host + "...")
-    print('************************************************************************')
+    print(100*'*')
 
     with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         LOG.info("Retrieving data...")
         reply = ncc.get(filter=('subtree', interface_filter))
 
-        # print("===============================REPLY=============================")
-        # print(tounicode(reply.data, pretty_print=True))
-        # print("======================================================================")
-        # for c in ncc.server_capabilities:
-        #     print(c)
-
-
-        info = questionary.select(
+        tag = questionary.select(
             "Please select an info:",
             choices=[
                 'tuned-frequency',
                 'opt-setpoint'
             ]).ask()
 
-        info_filter = """//*[name()=$info]"""
-        print("======================================================================")
-        print(info, "for", interface_name, "interface:", reply.data.xpath(info_filter, info=info)[0].text)
-        print("======================================================================")
+        info_filter = """//*[name()=$tag]"""
+        value = reply.data.xpath(info_filter, tag=tag)[0].text
+
+        print(100 * '=')
+        print(tag, "for", interface_name, "interface:", value)
+        print(100 * '=')
 
 
 @course_function(shortcut='1')
-def get_pm_data():
-    print('************************************************************************')
+def get_tx_and_rx():
+    print(100*'*')
     LOG.info("Starting...")
-    print('************************************************************************')
+    print(100*'*')
 
     host = choose_host()
 
-    print('************************************************************************')
+    print(100*'*')
     LOG.info("Connecting to", host + "...")
-    print('************************************************************************')
+    print(100*'*')
 
     with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
     # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
@@ -113,65 +108,119 @@ def get_pm_data():
     #  Guardare slide
 
         rpc = '''
-            <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
-                         xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
-                         xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
-    	                 xmlns:eth="http://www.advaoptical.com/aos/netconf/aos-core-ethernet">
-                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="1/2/c1/et100"]/fac:logical-interface/eth:ety6</target-entity>
-                <pm-data>
-                    <pm-current-data>
-                        <bin-interval>acor-pmt:interval-indefinite</bin-interval>
-                    </pm-current-data>
-                </pm-data>
-            </get-pm-data>
+          <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
+                    xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
+                    xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility">
+            <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="1/2/n2"]/fac:physical-interface/fac:lr-phys-optical</target-entity>
+            <pm-data>
+              <pm-current-data/>
+            </pm-data>
+          </get-pm-data>
         '''
-        print('************************************************************************')
+        print(100 * '*')
         LOG.info('Sending RPC...')
-        print('************************************************************************')
+        print(100 * '*')
 
         result = ncc.dispatch(to_ele(rpc), source='running')
-        print("======================================================================")
-        print(result)
-        print("======================================================================")
+        result = result.xml.encode()
+        root = etree.fromstring(result)
 
-        #TODO: capire come convertire l'oggetto in qualcosa di parsabile
-        # result.data restituisce None
+        prefix = 'acor-factt:'
 
-        # print(type(result.data))
-        # print(type(str(result)))
-        # print(str(result))
-        # print(type(result.data_xml))
+        power_type = questionary.select(
+            "Please select info:",
+            choices=[
+                'opt-rcv-pwr',
+                'opt-trmt-pwr',
+            ]).ask()
+        power_range = questionary.select(
+            "Please select power:",
+            choices=[
+                '',
+                '-lo',
+                '-mean',
+                '-hi'
+            ]).ask()
 
-        # mon_type = questionary.select(
-        #     "Please select mon-type:",
-        #     choices=[
-        #         'acor-factt:opt-rcv-pwr',
-        #         'acor-factt:opt-trmt-pwr',
-        #         'acor-factt:fec-ber'
-        #     ]).ask()
-        #
-        # power = questionary.select(
-        #     "Please select power:",
-        #     choices=[
-        #         'lo',
-        #         'mean',
-        #         'hi'
-        #     ]).ask()
-        # mon_type = mon_type + '-' + power
-        # mt_filter = '''//*[name()='mon-type']'''
-        # tags = result.data.xpath(mt_filter)
-        # for tag in tags:
-        #     if tag.text == mon_type:
-        #         print("mon-type:", tag.text)
+        info = prefix + power_type + power_range
+        mt_filter = '''//*[name()='mon-type']'''
+        tags = root.xpath(mt_filter)
+
+        for tag in tags:
+            time_interval = tag.getparent().getparent().getchildren()[0]
+            if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+                print(100 * '*')
+                print("Info for", time_interval.text + ":", tag.text)
+                print("Value:", tag.getnext().text)
+                print(100 * '*')
+
+@course_function(shortcut='2')
+def get_ber():
+
+    print(100*'*')
+    LOG.info("Starting...")
+    print(100*'*')
+
+    host = choose_host()
+
+    print(100*'*')
+    LOG.info("Connecting to", host + "...")
+    print(100*'*')
+
+    with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
+    # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
+    #  Se provo a mettere '1/2/c3/et100', non va ne per .19 ne per .23
+    #  Guardare slide
+
+        rpc = '''
+          <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
+                    xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
+                    xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
+                xmlns:eth="http://www.advaoptical.com/aos/netconf/aos-core-ethernet">
+            <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="1/2/c1/et100"]/fac:logical-interface/eth:ety6</target-entity>
+            <pm-data>
+              <pm-current-data/>
+            </pm-data>
+          </get-pm-data>
+        '''
+        print(100 * '*')
+        LOG.info('Sending RPC...')
+        print(100 * '*')
+
+        result = ncc.dispatch(to_ele(rpc), source='running')
+        result = result.xml.encode()
+        root = etree.fromstring(result)
+
+        prefix = 'acor-factt:'
+        ber = 'fec-ber'
+        ber_range = questionary.select(
+            "Please select power:",
+            choices=[
+                '',
+                '-mean'
+            ]).ask()
+
+        info = prefix + ber + ber_range
+        mt_filter = '''//*[name()='mon-type']'''
+        tags = root.xpath(mt_filter)
+
+        for tag in tags:
+            time_interval = tag.getparent().getparent().getchildren()[0]
+            if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+                print(100 * '*')
+                print("Info for", time_interval.text + ":", tag.text)
+                print("Value:", tag.getnext().text)
+                print(100 * '*')
 
 
 
-@course_function(shortcut="2")
+
+@course_function(shortcut="3")
 def get_and_filter_optical_channels():
     """Get and filter optical channels."""
-    print('************************************************************************')
+    print(100 * '*')
     LOG.info("Starting...")
-    print('************************************************************************')
+    print(100 * '*')
 
     host = questionary.select(
         "Please choose a host:",
@@ -180,14 +229,9 @@ def get_and_filter_optical_channels():
             '10.11.12.23'
         ]).ask()  # returns value of selection
 
-    # if host == '10.11.12.19':
-    #     interface_name = '1/2/n2'
-    # else:
-    #     interface_name = '1/2/n1'
-
-    print('************************************************************************')
+    print(100 * '*')
     LOG.info("Connecting to", host + "...")
-    print('************************************************************************')
+    print(100 * '*')
 
     with ncconnect(host=host, port="830",  username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/n1/ot100' funziona solo per .19
@@ -202,22 +246,46 @@ def get_and_filter_optical_channels():
                          xmlns:eq="http://www.advaoptical.com/aos/netconf/aos-core-equipment"
                          xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
                          xmlns:otn="http://www.advaoptical.com/aos/netconf/aos-domain-otn">
-                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="1/2/n1/ot100"]/fac:logical-interface/otn:optical-channel</target-entity>
-                <pm-data>
-                    <pm-current-data/>
-                </pm-data>
+              <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="1/2/n1/ot100"]/fac:logical-interface/otn:optical-channel</target-entity>
+              <pm-data>
+                <pm-current-data/>
+              </pm-data>
             </get-pm-data>
         '''
 
-        print('************************************************************************')
+        print(100 * '*')
         LOG.info('Sending an RPC...')
-        print('************************************************************************')
+        print(100 * '*')
 
         result = ncc.dispatch(to_ele(rpc), source='running')
-        print("======================================================================")
-        print(result)
-        print("======================================================================")
+        result = result.xml.encode()
+        root = etree.fromstring(result)
 
-        # TODO: stesso problema della funzione get_pm_data()
+        prefix ='adom-oduckpat:'
+        channel_quality = questionary.select(
+            "Please select info:",
+            choices=[
+                'signal-to-noise-ratio',
+                'q-factor',
+                'differential-group-delay'
+            ]).ask()
+        quality_range = questionary.select(
+            "Please select power:",
+            choices=[
+                '',
+                '-lo',
+                '-mean',
+                '-hi'
+            ]).ask()
+        info = prefix + channel_quality + quality_range
 
+        mt_filter = '''//*[name()='mon-type']'''
+        tags = root.xpath(mt_filter)
 
+        for tag in tags:
+            time_interval = tag.getparent().getparent().getchildren()[0]
+            if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+                print(100 * '*')
+                print("Info for", time_interval.text + ":", tag.text)
+                print("Value:", tag.getnext().text)
+                print(100 * '*')

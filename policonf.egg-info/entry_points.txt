@@ -1,0 +1,3 @@
+[console_scripts]
+policonf = policonf.__main__:run
+

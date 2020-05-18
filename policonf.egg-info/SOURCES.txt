@@ -1,0 +1,8 @@
+README.md
+setup.py
+policonf.egg-info/PKG-INFO
+policonf.egg-info/SOURCES.txt
+policonf.egg-info/dependency_links.txt
+policonf.egg-info/entry_points.txt
+policonf.egg-info/requires.txt
+policonf.egg-info/top_level.txt
