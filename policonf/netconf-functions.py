@@ -27,7 +27,7 @@ PASSWORD = 'CHGME.1a'
 
 
 #TODO: in the iPython environment: %load_ext policonf --> %polirun 0 (or any other shortcut)
-
+# TODO: wrap sensible codes in try/except blocks
 
 ###################################################################################################
 #                                    AUXILIARY FUNCTIONS                                          #
@@ -43,9 +43,7 @@ def choose_host():
 
 
 def set_frequency_and_power_filter(host, ncc, interface_name, tags):
-    print(100*'*')
     LOG.info("Getting frequency and/or power...")
-    print(100*'*')
 
     interface_filter = '''
         <managed-element>
@@ -58,26 +56,20 @@ def set_frequency_and_power_filter(host, ncc, interface_name, tags):
 
     reply = ncc.get(filter=('subtree', interface_filter))
 
-    if type(tags) != type([]):
-        tags_list = []
-        tags_list.append(tags)
-    else:
-        tags_list = tags
-
-    for tag in tags_list:
-        print(tag)
+    for tag in tags:
         info_filter = """//*[name()=$tag]"""
-        value = reply.data.xpath(info_filter, tag=tag)[0].text
+        values = reply.data.xpath(info_filter, tag=tag)
+        if len(values) != 0:
+            for value in values:
+                print(100 * '*')
+                print(tag, "for", interface_name, "interface:", value.text)
+                print(100 * '=')
+        else:
+            LOG.info("No matching tag for <" + tag + ">")
 
-        print(100 * '=')
-        print(tag, "for", interface_name, "interface:", value)
-        print(100 * '=')
 
-
-def set_tx_and_rx_filter(ncc, types, ranges):
-    print(100 * '*')
+def set_tx_and_rx_filter(ncc, power_types, power_ranges):
     LOG.info('Getting optical receiver and/or transmitter power...')
-    print(100 * '*')
 
     rpc = ''' <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
                             xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
@@ -90,35 +82,25 @@ def set_tx_and_rx_filter(ncc, types, ranges):
 
     result = ncc.dispatch(to_ele(rpc), source='running').xml.encode()
     root = etree.fromstring(result)
-
     prefix = 'acor-factt:'
-
-    if type(types) != type([]):
-        power_types = [types]
-    else:
-        power_types = types
-
-    if type(ranges) != type([]):
-        power_ranges = [ranges]
-    else:
-        power_ranges = ranges
+    tags = list()
 
     for pt in power_types:
         for pr in power_ranges:
             info = prefix + pt + pr
             mt_filter = '''//*[name()='mon-type']'''
-            tags = root.xpath(mt_filter)
+            tags= tags + root.xpath(mt_filter) # unisco le varie liste risultanti in un'unica lista
 
-            for tag in tags:
-                time_interval = tag.getparent().getparent().getchildren()[0]
-                if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                    print(100 * '*')
-                    print("Info for", time_interval.text + ":", tag.text)
-                    print("Value:", tag.getnext().text)
-                    print(100 * '*')
+    for tag in tags:
+        time_interval = tag.getparent().getparent().getchildren()[0]
+        if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+            print(100 * '*')
+            print("Info for", time_interval.text + ":", tag.text)
+            print("Value:", tag.getnext().text)
+            print(100 * '*')
 
 
-def set_ber_filter(ncc, ranges):
+def set_ber_filter(ncc, ber_ranges):
     rpc = ''' <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
                         xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
                         xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
@@ -129,9 +111,7 @@ def set_ber_filter(ncc, ranges):
                 </pm-data>
               </get-pm-data> '''
 
-    print(100 * '*')
     LOG.info('Getting bit error rate...')
-    print(100 * '*')
 
     result = ncc.dispatch(to_ele(rpc), source='running')
     result = result.xml.encode()
@@ -139,25 +119,21 @@ def set_ber_filter(ncc, ranges):
 
     prefix = 'acor-factt:'
     ber = 'fec-ber'
-
-    if type(ranges) != type([]):
-        ber_ranges = []
-        ber_ranges.append(ranges)
-    else:
-        ber_ranges = ranges
+    tags = list()
 
     for r in ber_ranges:
         info = prefix + ber + r
         mt_filter = '''//*[name()='mon-type']'''
-        tags = root.xpath(mt_filter)
 
-        for tag in tags:
-            time_interval = tag.getparent().getparent().getchildren()[0]
-            if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                print(100 * '*')
-                print("Info for", time_interval.text + ":", tag.text)
-                print("Value:", tag.getnext().text)
-                print(100 * '*')
+        tags = tags + root.xpath(mt_filter)
+
+    for tag in tags:
+        time_interval = tag.getparent().getparent().getchildren()[0]
+        if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+            print(100 * '*')
+            print("Info for", time_interval.text + ":", tag.text)
+            print("Value:", tag.getnext().text)
+            print(100 * '*')
 
 
 def set_optical_channel_filter(ncc, channel_qualities, quality_ranges):
@@ -172,40 +148,27 @@ def set_optical_channel_filter(ncc, channel_qualities, quality_ranges):
                         </pm-data>
             </get-pm-data> '''
 
-    print(100 * '*')
     LOG.info('Getting SNR, q-factor and/or group delay...')
-    print(100 * '*')
 
     result = ncc.dispatch(to_ele(rpc), source='running').xml.encode()
     root = etree.fromstring(result)
 
     prefix = 'adom-oduckpat:'
+    tags = list()
 
-    if type(channel_qualities) != type([]):
-        channel_qualities_list = [channel_qualities]
-    else:
-        channel_qualities_list = channel_qualities
-
-    if type(quality_ranges) != type([]):
-        quality_ranges_list = [quality_ranges]
-    else:
-        quality_ranges_list = quality_ranges
-
-    for cq in channel_qualities_list:
-        for qr in quality_ranges_list:
-
+    for cq in channel_qualities:
+        for qr in quality_ranges:
             info = prefix + cq + qr
-
             mt_filter = '''//*[name()='mon-type']'''
-            tags = root.xpath(mt_filter)
+            tags = tags + root.xpath(mt_filter)
 
-            for tag in tags:
-                time_interval = tag.getparent().getparent().getchildren()[0]
-                if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                    print(100 * '*')
-                    print("Info for", time_interval.text + ":", tag.text)
-                    print("Value:", tag.getnext().text)
-                    print(100 * '*')
+    for tag in tags:
+        time_interval = tag.getparent().getparent().getchildren()[0]
+        if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
+            print(100 * '*')
+            print("Info for", time_interval.text + ":", tag.text)
+            print("Value:", tag.getnext().text)
+            print(100 * '*')
 
 
 ###################################################################################################
@@ -214,9 +177,8 @@ def set_optical_channel_filter(ncc, channel_qualities, quality_ranges):
 @course_function(shortcut='0')
 def get_frequency_and_power():
     """Get frequency and power."""
-    print(100*'*')
+
     LOG.info("Starting...")
-    print(100*'*')
 
     host = choose_host()
 
@@ -229,40 +191,38 @@ def get_frequency_and_power():
             '1/2/c3'
         ]).ask()
 
-    print(100 * '*')
     LOG.info("Connecting to " + host + "...")
-    print(100 * '*')
 
     with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         LOG.info("Retrieving data...")
 
+        tags = list()
         tag = questionary.select(
             "Please select an info:",
             choices=[
                 'tuned-frequency',
-                'opt-setpoint'
+                'opt-setpoint',
+                'sbem'
             ]).ask()
+        tags.append(tag)
 
-        set_frequency_and_power_filter(host, ncc, interface_name, tag)
+        set_frequency_and_power_filter(host, ncc, interface_name, tags)
 
 
 @course_function(shortcut='1')
 def get_tx_and_rx():
-    print(100*'*')
     LOG.info("Starting...")
-    print(100*'*')
 
     host = choose_host()
 
-    print(100 * '*')
     LOG.info("Connecting to " + host + "...")
-    print(100 * '*')
 
     with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
         #  Se provo a mettere '1/2/c3/et100', non va ne per .19 ne per .23
         #  Guardare slide
-
+        power_types = list()
+        power_ranges = list()
         power_type = questionary.select(
             "Please select info:",
             choices=[
@@ -278,26 +238,25 @@ def get_tx_and_rx():
                 '-hi'
             ]).ask()
 
-        set_tx_and_rx_filter(ncc, power_type, power_range)
+        power_types.append(power_type)
+        power_ranges.append(power_range)
+
+        set_tx_and_rx_filter(ncc, power_types, power_ranges)
 
 
 @course_function(shortcut='2')
 def get_ber():
-    print(100*'*')
     LOG.info("Starting...")
-    print(100*'*')
-
     host = choose_host()
 
-    print(100*'*')
     LOG.info("Connecting to " + host + "...")
-    print(100*'*')
 
     with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
         #  Se provo a mettere '1/2/c3/et100', non va ne per .19 ne per .23
         #  Guardare slide
 
+        ber_ranges = list()
         ber_range = questionary.select(
             "Please select power:",
             choices=[
@@ -305,15 +264,15 @@ def get_ber():
                 '-mean'
             ]).ask()
 
-        set_ber_filter(ncc, ber_range)
+        ber_ranges.append(ber_range)
+
+        set_ber_filter(ncc, ber_ranges)
 
 
 @course_function(shortcut="3")
 def get_and_filter_optical_channels():
     """Get and filter optical channels."""
-    print(100 * '*')
     LOG.info("Starting...")
-    print(100 * '*')
 
     host = questionary.select(
         "Please choose a host:",
@@ -322,9 +281,7 @@ def get_and_filter_optical_channels():
             '10.11.12.23'
         ]).ask()  # returns value of selection
 
-    print(100 * '*')
     LOG.info("Connecting to " + host + "...")
-    print(100 * '*')
 
     with ncconnect(host=host, port="830",  username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/n1/ot100' funziona solo per .19
@@ -333,6 +290,8 @@ def get_and_filter_optical_channels():
 
         LOG.info("Getting and filtering optical channels...")
 
+        channel_qualities = list()
+        quality_ranges = list()
         channel_quality = questionary.select(
             "Please select info:",
             choices=[
@@ -349,21 +308,28 @@ def get_and_filter_optical_channels():
                 '-hi'
             ]).ask()
 
-        set_optical_channel_filter(ncc, channel_quality, quality_range)
+        channel_qualities.append(channel_quality)
+        quality_ranges.append(quality_range)
+
+        set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
 
 
 
 @course_function(shortcut="4")
 def periodic_requests():
     """Periodically iterates all the previous requests"""
-    print(100 * '*')
     LOG.info("Starting...")
-    print(100 * '*')
 
     ################################################################################################
     #                DATA INPUT PHASE                                                              #
     ################################################################################################
-    host = input('Insert the address of the host you want to connect to: ')
+
+    host = questionary.select(
+        "Insert the address of the host you want to connect to:",
+        choices=[
+            '10.11.12.19',
+            '10.11.12.23'
+        ]).ask()
 
     default = questionary.select(
         'Do you want to use the default port, username and password?',
@@ -390,28 +356,36 @@ def periodic_requests():
             '1/2/c3'
         ]).ask()
 
-    std_out = questionary.select(
-        "Where would you like to see the output?",
-        choices=[
-            'console',
-            'file'
-        ]).ask()
+    # TODO: Ora il logger scrive direttamente su file (vedi __main__.py) e le print su console
+    #   quindi non serve più dare la scelta all'utente. Lascio comunque il codice nel caso si vogliano
+    #   fare entrambe le cose
 
-    control_period = input("Insert time between two consecutive requests: ")
 
-    # TODO: Cambiando lo standard out su file vengono portate su file solo le print e non le LOG.info. Trovare una
-    #   soluzione oppure cambiare le LOG.info in print
-    if std_out == "file":
-        file = input("Insert the file path: ")
-        sys.stdout = open(file, "w")
+    # std_out = questionary.select(
+    #     "Where would you like to see the output?",
+    #     choices=[
+    #         'console',
+    #         'file'
+    #     ]).ask()
+
+    # if std_out == "file":
+    #     file = input("Insert the file path: ")
+    #     try:
+    #         sys.stdout = open(file, "w")
+    #     except:
+    #         LOG.info("Incorrect file path: writing in log.txt")
+    #         print("Incorrect file path: creating a log.txt file in the current folder")
+    #         sys.stdout = open("log.txt", "w")
 
     ################################################################################################
     #                CONNECTION SETUP AND REQUESTS                                                 #
     ################################################################################################
-    while(1):
-        print(100 * '*')
+
+
+    control_period = input("Insert time between two consecutive requests: ")
+
+    while(True):
         LOG.info("Connecting to " + host + "...")
-        print(100 * '*')
 
         with ncconnect(host=host, port=port,  username=username, password=password, hostkey_verify=False) as ncc:
             LOG.info("Retrieving data...")
@@ -420,16 +394,149 @@ def periodic_requests():
             tags = ["tuned-frequency", "opt-setpoint"]
             set_frequency_and_power_filter(host, ncc, interface_name, tags)
 
+            LOG.info("Getting transmitted and received power...")
             power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
             power_ranges = ['', '-lo', '-mean', '-hi']
             set_tx_and_rx_filter(ncc, power_types, power_ranges)
 
+            LOG.info("Getting signal BER...")
             ber_ranges = ['', '-mean']
             set_ber_filter(ncc, ber_ranges)
 
+            LOG.info("Getting optical channel quality values...")
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
             set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
 
         time.sleep(float(control_period))
 
+
+
+
+
+
+
+@course_function(shortcut="5")
+def periodic_variable_requests():
+    """
+        Periodically iterates all the previous requests, with the possibility
+        to change host, interface, or stopping the requests at each iteration
+    """
+    LOG.info("Starting...")
+
+    ################################################################################################
+    #                DATA INPUT PHASE                                                              #
+    ################################################################################################
+
+    host = questionary.select(
+        "Insert the address of the host you want to connect to:",
+        choices=[
+            '10.11.12.19',
+            '10.11.12.23'
+        ]).ask()
+
+    default = questionary.select(
+        'Do you want to use the default port, username and password?',
+        choices=[
+            'yes',
+            'no'
+        ]).ask()  # returns value of selection
+
+    if default == 'no':
+        port = input('Insert the port: ')
+        username = input('Insert the username: ')
+        password = getpass('Insert the password: ')
+    else:
+        port = "830"
+        username = USERNAME
+        password = PASSWORD
+
+    interface_name = questionary.select(
+        "Please choose an interface:",
+        choices=[
+            '1/2/n1',
+            '1/2/n2',
+            '1/2/c1',
+            '1/2/c3'
+        ]).ask()
+
+    # TODO: Ora il logger scrive direttamente su file (vedi __main__.py) e le print su console
+    #   quindi non serve più dare la scelta all'utente. Lascio comunque il codice nel caso si vogliano
+    #   fare entrambe le cose
+
+    # std_out = questionary.select(
+    #     "Where would you like to see the output?",
+    #     choices=[
+    #         'console',
+    #         'file'
+    #     ]).ask()
+
+    # if std_out == "file":
+    #     file = input("Insert the file path: ")
+    #     try:
+    #         sys.stdout = open(file, "w")
+    #     except:
+    #         LOG.info("Incorrect file path: writing in log.txt")
+    #         print("Incorrect file path: creating a log.txt file in the current folder")
+    #         sys.stdout = open("log.txt", "w")
+
+    ################################################################################################
+    #                CONNECTION SETUP AND REQUESTS                                                 #
+    ################################################################################################
+
+    isRequesting = True
+
+    while(isRequesting):
+        LOG.info("Connecting to " + host + "...")
+
+        with ncconnect(host=host, port=port,  username=username, password=password, hostkey_verify=False) as ncc:
+            LOG.info("Retrieving data...")
+            LOG.info("Getting tuned-frequency and opt-setpoint...")
+
+            tags = ["tuned-frequency", "opt-setpoint"]
+            set_frequency_and_power_filter(host, ncc, interface_name, tags)
+
+            LOG.info("Getting transmitted and received power...")
+            power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
+            power_ranges = ['', '-lo', '-mean', '-hi']
+            set_tx_and_rx_filter(ncc, power_types, power_ranges)
+
+            LOG.info("Getting signal BER...")
+            ber_ranges = ['', '-mean']
+            set_ber_filter(ncc, ber_ranges)
+
+            LOG.info("Getting optical channel quality values...")
+            channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
+            quality_ranges = ['', '-lo', '-mean', '-hi']
+            set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
+
+            answer = questionary.select(
+                'Do you want to continue?',
+                choices=[
+                    'Yes',
+                    'No',
+                    'Change host',
+                    'Change interface'
+                ]).ask()
+
+        if answer == 'Change host':
+            host = questionary.select(
+                "Insert the address of the host you want to connect to:",
+                choices=[
+                    '10.11.12.19',
+                    '10.11.12.23'
+                ]).ask()
+        if answer == 'Change interface':
+            interface_name = questionary.select(
+                "Please choose an interface:",
+                choices=[
+                    '1/2/n1',
+                    '1/2/n2',
+                    '1/2/c1',
+                    '1/2/c3'
+                ]).ask()
+
+        if answer == 'No':
+            isRequesting = False
+
+    # sys.stdout.close()
