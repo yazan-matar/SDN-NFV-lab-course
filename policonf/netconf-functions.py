@@ -1,11 +1,10 @@
 """The ADVA/PoliMi SDN course functions."""
 
-from logging import getLogger
+import logging
 
 import policonf.netconf
 from policonf.magic import course_function
 from ncclient.manager import connect as ncconnect
-
 
 # Other libraries
 from lxml import etree
@@ -16,8 +15,11 @@ from getpass import getpass
 import time
 import sys
 
+
 #: The logger instance for mod:`policonf`.
-LOG = getLogger(__package__)
+LOG = logging.getLogger(__package__)
+LOG.info("\n\n\n\n\n\n\ntesting logger\n\n\n\n\n\n\n\n\n")
+sys.stdout = sys.__stdout__
 
 #: The NETCONF client instance.
 NETCONF = policonf.netconf.NETCONF()
@@ -26,7 +28,7 @@ USERNAME = 'admin'
 PASSWORD = 'CHGME.1a'
 
 
-#TODO: in the iPython environment: %load_ext policonf --> %polirun 0 (or any other shortcut)
+# TODO: in the iPython environment: %load_ext policonf --> %polirun 0 (or any other shortcut)
 # TODO: wrap sensible codes in try/except blocks
 
 ###################################################################################################
@@ -43,6 +45,7 @@ def choose_host():
 
 
 def set_frequency_and_power_filter(host, ncc, interface_name, tags):
+    global LOG
     LOG.info("Getting frequency and/or power...")
 
     interface_filter = '''
@@ -89,7 +92,7 @@ def set_tx_and_rx_filter(ncc, power_types, power_ranges):
         for pr in power_ranges:
             info = prefix + pt + pr
             mt_filter = '''//*[name()='mon-type']'''
-            tags= tags + root.xpath(mt_filter) # unisco le varie liste risultanti in un'unica lista
+            tags = tags + root.xpath(mt_filter)  # unisco le varie liste risultanti in un'unica lista
 
     for tag in tags:
         time_interval = tag.getparent().getparent().getchildren()[0]
@@ -176,7 +179,7 @@ def set_optical_channel_filter(ncc, channel_qualities, quality_ranges):
 ###################################################################################################
 @course_function(shortcut='0')
 def get_frequency_and_power():
-    """Get frequency and power."""
+    """Get tuned frequency and optical set-point."""
 
     LOG.info("Starting...")
 
@@ -193,7 +196,7 @@ def get_frequency_and_power():
 
     LOG.info("Connecting to " + host + "...")
 
-    with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
+    with ncconnect(host=host, port="830", username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         LOG.info("Retrieving data...")
 
         tags = list()
@@ -211,13 +214,14 @@ def get_frequency_and_power():
 
 @course_function(shortcut='1')
 def get_tx_and_rx():
+    """Get optical received and transmitted power."""
     LOG.info("Starting...")
 
     host = choose_host()
 
     LOG.info("Connecting to " + host + "...")
 
-    with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
+    with ncconnect(host=host, port="830", username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
         #  Se provo a mettere '1/2/c3/et100', non va ne per .19 ne per .23
         #  Guardare slide
@@ -246,12 +250,13 @@ def get_tx_and_rx():
 
 @course_function(shortcut='2')
 def get_ber():
+    """Get bit error rate."""
     LOG.info("Starting...")
     host = choose_host()
 
     LOG.info("Connecting to " + host + "...")
 
-    with ncconnect(host=host, port="830",  username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
+    with ncconnect(host=host, port="830", username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/c1/et100' funziona solo per .19
         #  Se provo a mettere '1/2/c3/et100', non va ne per .19 ne per .23
         #  Guardare slide
@@ -271,7 +276,7 @@ def get_ber():
 
 @course_function(shortcut="3")
 def get_and_filter_optical_channels():
-    """Get and filter optical channels."""
+    """Get and SNR, q-factor and differential group delay."""
     LOG.info("Starting...")
 
     host = questionary.select(
@@ -283,7 +288,7 @@ def get_and_filter_optical_channels():
 
     LOG.info("Connecting to " + host + "...")
 
-    with ncconnect(host=host, port="830",  username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
+    with ncconnect(host=host, port="830", username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
         # TODO: in <target-entity>, se lascio '1/2/n1/ot100' funziona solo per .19
         #  Se provo a mettere '1/2/n2/ot100', non va ne per .19 ne per .23
         #  Guardare slide
@@ -314,10 +319,11 @@ def get_and_filter_optical_channels():
         set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
 
 
-
 @course_function(shortcut="4")
 def periodic_requests():
     """Periodically iterates all the previous requests"""
+    global LOG
+    # LOG = logging.getLogger(__package__)
     LOG.info("Starting...")
 
     ################################################################################################
@@ -356,38 +362,37 @@ def periodic_requests():
             '1/2/c3'
         ]).ask()
 
-    # TODO: Ora il logger scrive direttamente su file (vedi __main__.py) e le print su console
-    #   quindi non serve più dare la scelta all'utente. Lascio comunque il codice nel caso si vogliano
-    #   fare entrambe le cose
+    control_period = input("Insert time between two consecutive requests: ")
 
+    std_out = questionary.select(
+        "Where would you like to see the output?",
+        choices=[
+            'console',
+            'file'
+        ]).ask()
 
-    # std_out = questionary.select(
-    #     "Where would you like to see the output?",
-    #     choices=[
-    #         'console',
-    #         'file'
-    #     ]).ask()
+    if std_out == "file":
+        # file = input("Insert the file path or press enter to use the default log.txt file: ")
+        try:
+            sys.stdout = open("log.txt", "w")
+            LOG = logging.getLogger("fileLogger")
+        except:
+            LOG.info("Incorrect file path: writing in log.txt")
+            print("Incorrect file path: creating a log.txt file in the current folder")
+            sys.stdout = open("log.txt", "w")
+            LOG = logging.getLogger("fileLogger")
 
-    # if std_out == "file":
-    #     file = input("Insert the file path: ")
-    #     try:
-    #         sys.stdout = open(file, "w")
-    #     except:
-    #         LOG.info("Incorrect file path: writing in log.txt")
-    #         print("Incorrect file path: creating a log.txt file in the current folder")
-    #         sys.stdout = open("log.txt", "w")
+    else:
+        sys.stdout = sys.__stdout__
+        LOG = logging.getLogger(__package__)
 
     ################################################################################################
     #                CONNECTION SETUP AND REQUESTS                                                 #
     ################################################################################################
-
-
-    control_period = input("Insert time between two consecutive requests: ")
-
-    while(True):
+    while (True):
         LOG.info("Connecting to " + host + "...")
 
-        with ncconnect(host=host, port=port,  username=username, password=password, hostkey_verify=False) as ncc:
+        with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
             LOG.info("Retrieving data...")
             LOG.info("Getting tuned-frequency and opt-setpoint...")
 
@@ -409,11 +414,6 @@ def periodic_requests():
             set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
 
         time.sleep(float(control_period))
-
-
-
-
-
 
 
 @course_function(shortcut="5")
@@ -486,10 +486,10 @@ def periodic_variable_requests():
 
     isRequesting = True
 
-    while(isRequesting):
+    while (isRequesting):
         LOG.info("Connecting to " + host + "...")
 
-        with ncconnect(host=host, port=port,  username=username, password=password, hostkey_verify=False) as ncc:
+        with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
             LOG.info("Retrieving data...")
             LOG.info("Getting tuned-frequency and opt-setpoint...")
 
