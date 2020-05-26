@@ -14,20 +14,20 @@ import questionary
 from getpass import getpass
 import time
 import sys
+from datetime import datetime
 
-
-#: The logger instance for mod:`policonf`.
-# LOG = logging.getLogger(__package__)
-# LOG.info("\n\n\n\n\n\n\ntesting logger\n\n\n\n\n\n\n\n\n")
-# sys.stdout = sys.__stdout__
-
+# : The logger instance for mod:`policonf`.
 LOG = getLogger(__package__)
+sys.stdout = sys.__stdout__
 
 #: The NETCONF client instance.
 NETCONF = policonf.netconf.NETCONF()
 
 USERNAME = 'admin'
 PASSWORD = 'CHGME.1a'
+
+# 'w' to log on file with write mode (overwrites the current file content), 'a' to add to the file the new content
+MODE = 'w'
 
 
 # TODO: in the iPython environment: %load_ext policonf --> %polirun 0 (or any other shortcut)
@@ -45,10 +45,9 @@ def choose_host():
         ]).ask()
     return host
 
-# TODO: togliere host
-def set_frequency_and_power_filter(host, ncc, interface_name, tags):
-    global LOG
-    LOG.info("Getting frequency and/or power...")
+
+def set_frequency_and_power_filter(ncc, interface_name, tags):
+    print("Getting frequency and/or power...")
 
     interface_filter = '''
         <managed-element>
@@ -70,11 +69,11 @@ def set_frequency_and_power_filter(host, ncc, interface_name, tags):
                 print(tag, "for", interface_name, "interface:", value.text)
                 print(100 * '=')
         else:
-            LOG.info("No matching tag for <" + tag + ">")
+            print("No matching tag for <" + tag + ">")
 
 
 def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
-    LOG.info('Getting optical receiver and/or transmitter power...')
+    print('Getting optical receiver and/or transmitter power...')
 
     ### Nel caso non periodico cicla una sola volta
 
@@ -115,18 +114,25 @@ def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
 
 
 def set_ber_filter(ncc, interface_names, ber_ranges):
+    print('Getting bit error rate...')
 
     for interface_name in interface_names:
         cond1 = interface_name == '1/2/n2/ot100'
         cond2 = interface_name == '1/2/c3/et100'
-        # cond3 = interface_name == '1/2/n2/ot100/odu4' or interface_name == '1/2/c3/et100/odu4'
+        cond3 = interface_name == '1/2/n2/ot100/odu4' or interface_name == '1/2/c3/et100/odu4'
 
         if cond1:
             target = '/optical-channel'
         elif cond2:
             target = '/eth:ety6'
-        else:
+        elif cond3:
             target = '/odu4'
+        else:
+            print(100 * "*")
+            print("No BER associated to that interface")
+            print(100 * "*")
+
+            break
 
         rpc = ''' 
         <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
@@ -134,14 +140,12 @@ def set_ber_filter(ncc, interface_names, ber_ranges):
             xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
 	        xmlns:eth="http://www.advaoptical.com/aos/netconf/aos-core-ethernet">
 	        xmlns:otn="http://www.advaoptical.com/aos/netconf/aos-domain-otn">
-                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="''' + interface_name + '''"]/fac:logical-interface''' + target +'''</target-entity>
+                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="''' + interface_name + '''"]/fac:logical-interface''' + target + '''</target-entity>
                 <pm-data>
                     <pm-current-data/>
                 </pm-data>
         </get-pm-data>
         '''
-
-        LOG.info('Getting bit error rate...')
 
         result = ncc.dispatch(to_ele(rpc), source='running')
         print(result)
@@ -182,7 +186,7 @@ def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_
                             </pm-data>
                 </get-pm-data> '''
 
-        LOG.info('Getting SNR, q-factor and/or group delay...')
+        print('Getting SNR, q-factor and/or group delay...')
 
         result = ncc.dispatch(to_ele(rpc), source='running').xml.encode()
         root = etree.fromstring(result)
@@ -237,7 +241,7 @@ def get_frequency_and_power():
             ]).ask()
         tags.append(tag)
 
-        set_frequency_and_power_filter(host, ncc, interface_name, tags)
+        set_frequency_and_power_filter(ncc, interface_name, tags)
 
 
 @course_function(shortcut='1')
@@ -250,7 +254,6 @@ def get_tx_and_rx():
     LOG.info("Connecting to " + host + "...")
 
     with ncconnect(host=host, port="830", username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
-
         power_types = list()
         power_ranges = list()
         interface_names = list()
@@ -335,7 +338,6 @@ def get_and_filter_optical_channels():
     LOG.info("Connecting to " + host + "...")
 
     with ncconnect(host=host, port="830", username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
-
         LOG.info("Getting and filtering optical channels...")
 
         channel_qualities = list()
@@ -369,10 +371,12 @@ def get_and_filter_optical_channels():
         quality_ranges.append(quality_range)
         interface_names.append(interface_name)
 
-        set_optical_channel_filter(ncc, interface_names,channel_qualities, quality_ranges)
+        set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+
 
 @course_function(shortcut='4')
 def get_interfaces():
+    """Request all the interfaces """
     filter = '''
         <managed-element xmlns="http://www.advaoptical.com/aos/netconf/aos-core-managed-element">
             <interface xmlns="http://www.advaoptical.com/aos/netconf/aos-core-facility">
@@ -388,19 +392,18 @@ def get_interfaces():
     LOG.info("Connecting to " + host + "...")
 
     with ncconnect(host=host, port="830", username="admin", password="CHGME.1a", hostkey_verify=False) as ncc:
-
         result = ncc.get_config(source='running', filter=('subtree', filter))
         print(result)
 
-#TODO: Sistemare le funzioni periodiche
+
+# TODO: Sistemare le funzioni periodiche
 
 
 @course_function(shortcut="5")
 def periodic_requests():
     """Periodically iterates all the previous requests"""
-    # global LOG
-    # LOG = logging.getLogger(__package__)
-    LOG.info("Starting...")
+
+    print("Starting...")
 
     ################################################################################################
     #                DATA INPUT PHASE                                                              #
@@ -443,46 +446,66 @@ def periodic_requests():
         ]).ask()
 
     if std_out == "file":
-        # file = input("Insert the file path or press enter to use the default log.txt file: ")
+        file = input("Insert the file path or press enter to use the default log.txt file: ")
         try:
-            sys.stdout = open("log.txt", "w")
-            # LOG = logging.getLogger("fileLogger")
+            sys.stdout = open(file, MODE)
         except:
             LOG.info("Incorrect file path: writing in log.txt")
-            print("Incorrect file path: creating a log.txt file in the current folder")
-            sys.stdout = open("log.txt", "w")
-            # LOG = logging.getLogger("fileLogger")
+            sys.stdout = open("log.txt", MODE)
 
     else:
         sys.stdout = sys.__stdout__
-        # LOG = logging.getLogger(__package__)
 
     ################################################################################################
     #                CONNECTION SETUP AND REQUESTS                                                 #
     ################################################################################################
     while (True):
-        LOG.info("Connecting to " + host + "...")
+        print(20 * '#' + ' ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ' ' + 20 * '#')
+        print("\nConnecting to " + host + "...\n")
+
+        interface_names = [interface_name]
 
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
-            LOG.info("Retrieving data...")
-            LOG.info("Getting tuned-frequency and opt-setpoint...")
+            print("Retrieving data...")
+            print("Getting tuned-frequency and opt-setpoint...\n")
 
             tags = ["tuned-frequency", "opt-setpoint"]
-            set_frequency_and_power_filter(host, ncc, interface_name, tags)
+            try:
+                set_frequency_and_power_filter(ncc, interface_name, tags)
+            except:
+                print(100 * '*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100 * '*')
 
-            LOG.info("Getting transmitted and received power...")
+            print("\n\nGetting transmitted and received power...\n")
             power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
             power_ranges = ['', '-lo', '-mean', '-hi']
-            set_tx_and_rx_filter(ncc, power_types, power_ranges)
+            try:
+                set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges)
+            except:
+                print(100 * '*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100 * '*')
 
-            LOG.info("Getting signal BER...")
+            print("\n\nGetting signal BER...\n")
             ber_ranges = ['', '-mean']
-            set_ber_filter(ncc, ber_ranges)
+            try:
+                set_ber_filter(ncc, interface_names, ber_ranges)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
 
-            LOG.info("Getting optical channel quality values...")
+            print("\n\nGetting optical channel quality values...\n")
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
-            set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
+            try:
+                set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
+
 
         time.sleep(float(control_period))
 
@@ -493,18 +516,13 @@ def periodic_variable_requests():
         Periodically iterates all the previous requests, with the possibility
         to change host, interface, or stopping the requests at each iteration
     """
-    LOG.info("Starting...")
+    print("Starting...")
 
     ################################################################################################
     #                DATA INPUT PHASE                                                              #
     ################################################################################################
 
-    host = questionary.select(
-        "Insert the address of the host you want to connect to:",
-        choices=[
-            '10.11.12.19',
-            '10.11.12.23'
-        ]).ask()
+    host = choose_host()
 
     default = questionary.select(
         'Do you want to use the default port, username and password?',
@@ -531,55 +549,75 @@ def periodic_variable_requests():
             '1/2/c3'
         ]).ask()
 
-    # TODO: Ora il logger scrive direttamente su file (vedi __main__.py) e le print su console
-    #   quindi non serve più dare la scelta all'utente. Lascio comunque il codice nel caso si vogliano
-    #   fare entrambe le cose
+    std_out = questionary.select(
+        "Where would you like to see the output?",
+        choices=[
+            'console',
+            'file'
+        ]).ask()
 
-    # std_out = questionary.select(
-    #     "Where would you like to see the output?",
-    #     choices=[
-    #         'console',
-    #         'file'
-    #     ]).ask()
+    if std_out == "file":
+        file = input("Insert the file path or press enter to use the default log.txt file: ")
+        try:
+            sys.stdout = open(file, MODE)
+        except:
+            LOG.info("Incorrect file path: writing in log.txt")
+            sys.stdout = open("log.txt", MODE)
 
-    # if std_out == "file":
-    #     file = input("Insert the file path: ")
-    #     try:
-    #         sys.stdout = open(file, "w")
-    #     except:
-    #         LOG.info("Incorrect file path: writing in log.txt")
-    #         print("Incorrect file path: creating a log.txt file in the current folder")
-    #         sys.stdout = open("log.txt", "w")
+    else:
+        sys.stdout = sys.__stdout__
 
     ################################################################################################
     #                CONNECTION SETUP AND REQUESTS                                                 #
     ################################################################################################
-
     isRequesting = True
 
     while (isRequesting):
-        LOG.info("Connecting to " + host + "...")
+        print(20 * '#' + ' ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ' ' + 20 * '#')
+        print("\nConnecting to " + host + "...\n")
 
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
-            LOG.info("Retrieving data...")
-            LOG.info("Getting tuned-frequency and opt-setpoint...")
+            print("Retrieving data...")
+            print("Getting tuned-frequency and opt-setpoint...\n")
+
+            interface_names = [interface_name]
 
             tags = ["tuned-frequency", "opt-setpoint"]
-            set_frequency_and_power_filter(host, ncc, interface_name, tags)
+            try:
+                set_frequency_and_power_filter(ncc, interface_name, tags)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
 
-            LOG.info("Getting transmitted and received power...")
+            print("\n\nGetting transmitted and received power...\n")
             power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
             power_ranges = ['', '-lo', '-mean', '-hi']
-            set_tx_and_rx_filter(ncc, power_types, power_ranges)
+            try:
+                set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
 
-            LOG.info("Getting signal BER...")
+            print("\n\nGetting signal BER...\n")
             ber_ranges = ['', '-mean']
-            set_ber_filter(ncc, ber_ranges)
+            try:
+                set_ber_filter(ncc, interface_names, ber_ranges)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
 
-            LOG.info("Getting optical channel quality values...")
+            print("\n\nGetting optical channel quality values...\n")
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
-            set_optical_channel_filter(ncc, channel_qualities, quality_ranges)
+            try:
+                set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+            except:
+                print(100*'*')
+                print("Unspecified error, unable to retrieve those data")
+                print(100*'*')
 
             answer = questionary.select(
                 'Do you want to continue?',
@@ -591,12 +629,8 @@ def periodic_variable_requests():
                 ]).ask()
 
         if answer == 'Change host':
-            host = questionary.select(
-                "Insert the address of the host you want to connect to:",
-                choices=[
-                    '10.11.12.19',
-                    '10.11.12.23'
-                ]).ask()
+            host = choose_host()
+
         if answer == 'Change interface':
             interface_name = questionary.select(
                 "Please choose an interface:",
@@ -610,4 +644,3 @@ def periodic_variable_requests():
         if answer == 'No':
             isRequesting = False
 
-    # sys.stdout.close()
