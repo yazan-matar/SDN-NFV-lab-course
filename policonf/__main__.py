@@ -14,7 +14,7 @@ def run():
     #   Ricordarsi che ora il logger è impostato in modalità scrittura (non append)
 
     # logging.basicConfig()
-    # logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s: \n%(message)s\n', filename='log.txt', filemode='w', level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s: \n%(message)s\n', filename='log.txt', filemode='w', level=logging.INFO)
 
     logging.getLogger().setLevel(logging.INFO)
     logging.getLogger('policonf').setLevel(logging.INFO)
@@ -26,21 +26,21 @@ def run():
     # logging.getLogger().addHandler(handler)
 
     # Create two logger files
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s: \n%(message)s\n')
-
-    # first file logger
-    file_logger = logging.getLogger('fileLogger')
-    hdlr_1 = logging.FileHandler(filename='log.txt', mode='a')
-    hdlr_1.setFormatter(formatter)
-    file_logger.setLevel(logging.INFO)
-    file_logger.addHandler(hdlr_1)
-
-    # second Logger
-    general_logger = logging.getLogger("policonf")
-    hdlr_2 = logging.StreamHandler(sys.stdout)
-    hdlr_2.setFormatter(formatter)
-    general_logger.setLevel(logging.INFO)
-    general_logger.addHandler(hdlr_2)
+    # formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s: \n%(message)s\n')
+    #
+    # # first file logger
+    # file_logger = logging.getLogger('fileLogger')
+    # hdlr_1 = logging.FileHandler(filename='log.txt', mode='a')
+    # hdlr_1.setFormatter(formatter)
+    # file_logger.setLevel(logging.INFO)
+    # file_logger.addHandler(hdlr_1)
+    #
+    # # second Logger
+    # general_logger = logging.getLogger("policonf")
+    # hdlr_2 = logging.StreamHandler(sys.stdout)
+    # hdlr_2.setFormatter(formatter)
+    # general_logger.setLevel(logging.INFO)
+    # general_logger.addHandler(hdlr_2)
 
     start_ipython(argv=[sys.argv[0], "-i", "-c", dedent("""
     %load_ext policonf
