@@ -49,30 +49,34 @@ def choose_host():
     return host
 
 
-def set_frequency_and_power_filter(ncc, interface_name, tags):
+def set_frequency_and_power_filter(ncc, interface_names, tags):
     print("Getting frequency and/or power...")
 
-    interface_filter = '''
-        <managed-element>
-            <interface>
-                <name>''' + interface_name + '''</name>
-                <physical-interface/>
-            </interface>
-        </managed-element>
-    '''
+    for interface_name in interface_names:
 
-    reply = ncc.get(filter=('subtree', interface_filter))
+        print('\n\n' + 50 * '=' + '>', interface_name, '<' + 50 * '=' + '\n\n')
 
-    for tag in tags:
-        info_filter = """//*[name()=$tag]"""
-        values = reply.data.xpath(info_filter, tag=tag)
-        if len(values) != 0:
-            for value in values:
-                print(100 * '*')
-                print(tag, "for", interface_name, "interface:", value.text)
-                print(100 * '=')
-        else:
-            print("No matching tag for <" + tag + ">")
+        interface_filter = '''
+            <managed-element>
+                <interface>
+                    <name>''' + interface_name + '''</name>
+                    <physical-interface/>
+                </interface>
+            </managed-element>
+        '''
+
+        reply = ncc.get(filter=('subtree', interface_filter))
+
+        for tag in tags:
+            info_filter = """//*[name()=$tag]"""
+            values = reply.data.xpath(info_filter, tag=tag)
+            if len(values) != 0:
+                for value in values:
+                    print(100 * '*')
+                    print(tag, "for", interface_name, "interface:", value.text)
+                    print(100 * '=')
+            else:
+                print("No matching tag for <" + tag + ">")
 
 
 def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
@@ -102,6 +106,10 @@ def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
         tags = list()
         infos = list()
 
+
+        print('\n\n' + 50*'=' + '>', interface_name, '<' + 50*'=' + '\n\n')
+
+
         for pt in power_types:
             for pr in power_ranges:
                 info = prefix + pt + pr
@@ -120,36 +128,25 @@ def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
                     print(100 * '*')
 
 
-def set_ber_filter(ncc, interface_names, ber_ranges):
+def set_ber_filter(ncc, interface_names, ber_ranges, host):
     print('Getting bit error rate...')
+    # TODO: penso che i dati del ber si trovino solo nelle interfacce client (c1 e c3), mentre
+    #  i dati degli optical channel si trovano solo nelle interfacce network (n1 e n2)
+
+    # TODO: in host 19 crasha quando prova a cercare 1/2/c1/et100, in host 23 crasha quando prova a cercare odu
 
     for interface_name in interface_names:
-        # cond1 = interface_name == '1/2/n2/ot100'
-        # cond2 = interface_name == '1/2/c3/et100'
-        # cond3 = interface_name == '1/2/n2/ot100/odu4' or interface_name == '1/2/c3/et100/odu4'
-        net_regex = '1/2/n./ot100'
+
         client_regex = '1/2/c./et100'
-        # TODO: sistemare regex odu
-        odu_regex = '1/2/.+/odu'
+        cond = re.match(client_regex, interface_name)
 
-        cond1 = re.match(net_regex, interface_name)
-        cond2 = re.match(client_regex, interface_name)
-        cond3 = re.match(odu_regex, interface_name)
+        print('\n\n' + 50*'=' + '>', interface_name, '<' + 50*'=' + '\n\n')
 
-        print(3*'REGEX RESULT\n',cond1, cond2, cond3)
-
-        if cond1 is not None:
-            target = '/optical-channel'
-        elif cond2 is not None:
-            target = '/eth:ety6'
-        elif cond3 is not None:
-            target = '/odu4'
-        else:
+        if cond is None:
             print(100 * "*")
-            print("No BER associated to that interface")
+            print("No BER associated to ", interface_name)
             print(100 * "*")
-
-            break
+            continue
 
         rpc = ''' 
         <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
@@ -157,15 +154,21 @@ def set_ber_filter(ncc, interface_names, ber_ranges):
             xmlns:fac="http://www.advaoptical.com/aos/netconf/aos-core-facility"
 	        xmlns:eth="http://www.advaoptical.com/aos/netconf/aos-core-ethernet">
 	        xmlns:otn="http://www.advaoptical.com/aos/netconf/aos-domain-otn">
-                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="''' + interface_name + '''"]/fac:logical-interface''' + target + '''</target-entity>
+                <target-entity>/me:managed-element[me:entity-name="1"]/fac:interface[fac:name="''' + interface_name + '''"]/fac:logical-interface/eth:ety6</target-entity>
                 <pm-data>
                     <pm-current-data/>
                 </pm-data>
         </get-pm-data>
         '''
+        try:
+            result = ncc.dispatch(to_ele(rpc), source='running')
+        except:
+            print(100 * "*")
+            print("Interface not found in ", host)
+            print(100 * "*")
+            continue
 
-        result = ncc.dispatch(to_ele(rpc), source='running')
-        print(result)
+        # print(result)
         result = result.xml.encode()
 
         root = etree.fromstring(result)
@@ -195,8 +198,20 @@ def set_ber_filter(ncc, interface_names, ber_ranges):
 
 
 
-def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges):
+def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges, host):
     for interface_name in interface_names:
+
+        print('\n\n' + 50*'=' + '>', interface_name, '<' + 50*'=' + '\n\n')
+
+        net_regex = '1/2/n./ot100'
+        cond = re.match(net_regex, interface_name)
+
+        if cond is None:
+            print(100 * "*")
+            print("No Optical Channel Quality PM associated to ", interface_name)
+            print(100 * "*")
+            continue
+
         rpc = ''' <get-pm-data xmlns="http://www.advaoptical.com/aos/netconf/aos-core-pm"
                             xmlns:me="http://www.advaoptical.com/aos/netconf/aos-core-managed-element"
                             xmlns:eq="http://www.advaoptical.com/aos/netconf/aos-core-equipment"
@@ -210,7 +225,15 @@ def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_
 
         print('Getting SNR, q-factor and/or group delay...')
 
-        result = ncc.dispatch(to_ele(rpc), source='running').xml.encode()
+        try:
+            result = ncc.dispatch(to_ele(rpc), source='running')
+        except:
+            print(100 * "*")
+            print("Interface not found in ", host)
+            print(100 * "*")
+            continue
+
+        result = result.xml.encode()
         root = etree.fromstring(result)
 
         prefix = 'adom-oduckpat:'
@@ -246,28 +269,34 @@ def get_frequency_and_power():
 
     host = choose_host()
 
-    interface_name = questionary.select(
-        "Please choose an interface:",
-        choices=[
-            '1/2/n1',
-            '1/2/n2'
-        ]).ask()
-
     LOG.info("Connecting to " + host + "...")
 
     with ncconnect(host=host, port=PORT, username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
         LOG.info("Retrieving data...")
 
         tags = list()
+        interface_names = list()
+
+        interface_name = questionary.select(
+            "Please choose an interface:",
+            choices=[
+                '1/2/n1',
+                '1/2/n2',
+                '1/2/c1',
+                '1/2/c3'
+            ]).ask()
+
         tag = questionary.select(
             "Please select an info:",
             choices=[
                 'tuned-frequency',
                 'opt-setpoint'
             ]).ask()
-        tags.append(tag)
 
-        set_frequency_and_power_filter(ncc, interface_name, tags)
+        tags.append(tag)
+        interface_names.append(interface_name)
+
+        set_frequency_and_power_filter(ncc, interface_names, tags)
 
 
 @course_function(shortcut='1')
@@ -324,10 +353,6 @@ def get_ber():
     LOG.info("Connecting to " + host + "...")
 
     with ncconnect(host=host, port=PORT, username=USERNAME, password=PASSWORD, hostkey_verify=False) as ncc:
-        # TODO: Da quel che ho capito, il parametro BER si trova solo nelle interfacce logiche, che tra l'altro
-        #  si trovano solo nell'host .23, e solo per n2 e c3
-        #  Altra cosa, il BER si trova soltanto in 1/2/c3/et100
-        #  Chiedere chiarimenti prima del 30 maggio
 
         ber_ranges = list()
         interface_names = list()
@@ -349,13 +374,15 @@ def get_ber():
             "Please select range:",
             choices=[
                 '',
-                '-mean'
+                '-lo',
+                '-mean',
+                '-hi'
             ]).ask()
 
         ber_ranges.append(ber_range)
         interface_names.append(interface_name)
 
-        set_ber_filter(ncc, interface_names, ber_ranges)
+        set_ber_filter(ncc, interface_names, ber_ranges, host)
 
 # TODO: sistemare sta funzione
 @course_function(shortcut="3")
@@ -379,6 +406,12 @@ def get_and_filter_optical_channels():
             choices=[
                 '1/2/n1/ot100',
                 '1/2/n2/ot100',
+                '1/2/c1/et100',
+                '1/2/c3/et100',
+                '1/2/n1/ot100/odu4',
+                '1/2/n2/ot100/odu4',
+                '1/2/c1/et100/odu4',
+                '1/2/c3/et100/odu4'
             ]).ask()
 
         channel_quality = questionary.select(
@@ -401,7 +434,7 @@ def get_and_filter_optical_channels():
         quality_ranges.append(quality_range)
         interface_names.append(interface_name)
 
-        set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+        set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges, host)
 
 
 @course_function(shortcut='4')
@@ -457,14 +490,28 @@ def periodic_requests():
         username = USERNAME
         password = PASSWORD
 
-    interface_name = questionary.select(
-        "Please choose an interface:",
-        choices=[
-            '1/2/n1',
-            '1/2/n2',
-            '1/2/c1',
-            '1/2/c3'
-        ]).ask()
+    interface_names = ['1/2/n1', '1/2/n2', '1/2/c1', '1/2/c3']
+    logical_interfaces = list()
+
+    for interface_name in interface_names:
+        net_regex = '1/2/n.'
+        client_regex = '1/2/c.'
+
+
+        if re.match(net_regex, interface_name) is not None:
+            suffixes = ['/ot100', '/ot100/odu4']
+        elif re.match(client_regex, interface_name) is not None:
+            suffixes = ['/et100', '/et100/odu4']
+        else:
+            suffixes = list()
+
+
+        for suffix in suffixes:
+            logical_interface = interface_name + suffix
+            logical_interfaces.append(logical_interface)
+
+    print(logical_interfaces)
+
 
     control_period = input("Insert time between two consecutive requests: ")
 
@@ -493,7 +540,6 @@ def periodic_requests():
         print(20 * '#' + ' ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ' ' + 20 * '#')
         print("\nConnecting to " + host + "...\n")
 
-        interface_names = [interface_name]
 
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
             print("Retrieving data...")
@@ -501,7 +547,7 @@ def periodic_requests():
 
             tags = ["tuned-frequency", "opt-setpoint"]
             try:
-                set_frequency_and_power_filter(ncc, interface_name, tags)
+                set_frequency_and_power_filter(ncc, interface_names, tags)
             except:
                 print(100 * '*')
                 print("Unspecified error, unable to retrieve those data")
@@ -518,9 +564,9 @@ def periodic_requests():
                 print(100 * '*')
 
             print("\n\nGetting signal BER...\n")
-            ber_ranges = ['', '-mean']
+            ber_ranges = ['', '-lo', '-mean', '-hi']
             try:
-                set_ber_filter(ncc, interface_names, ber_ranges)
+                set_ber_filter(ncc, logical_interfaces, ber_ranges, host)
             except:
                 print(100*'*')
                 print("Unspecified error, unable to retrieve those data")
@@ -530,7 +576,7 @@ def periodic_requests():
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
             try:
-                set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+                set_optical_channel_filter(ncc, logical_interfaces, channel_qualities, quality_ranges, host)
             except:
                 print(100*'*')
                 print("Unspecified error, unable to retrieve those data")
@@ -570,38 +616,27 @@ def periodic_variable_requests():
         username = USERNAME
         password = PASSWORD
 
-    interface_name = questionary.select(
-        "Please choose an interface:",
-        choices=[
-            '1/2/n1',
-            '1/2/n2',
-            '1/2/c1',
-            '1/2/c3'
-        ]).ask()
-
-    interface_names = [interface_name]
+    interface_names = ['1/2/n1', '1/2/n2', '1/2/c1', '1/2/c3']
+    logical_interfaces = list()
 
     for interface_name in interface_names:
         net_regex = '1/2/n.'
         client_regex = '1/2/c.'
-        logical_interfaces = list()
+
 
         if re.match(net_regex, interface_name) is not None:
-            logical_interface = questionary.select(
-                "Please choose a logical interface for " + interface_name + ":",
-                choices=[
-                    'ot100',
-                    'ot100/odu4'
-                ]).ask()
+            suffixes = ['/ot100', '/ot100/odu4']
         elif re.match(client_regex, interface_name) is not None:
-            logical_interface = questionary.select(
-                "Please choose a logical interface for " + interface_name + ":",
-                choices=[
-                    'et100',
-                    'et100/odu4'
-                ]).ask()
-        logical_interface = interface_name + '/' + logical_interface
-        logical_interfaces.append(logical_interface)
+            suffixes = ['/et100', '/et100/odu4']
+        else:
+            suffixes = list()
+
+
+        for suffix in suffixes:
+            logical_interface = interface_name + suffix
+            logical_interfaces.append(logical_interface)
+
+    print(logical_interfaces)
 
     std_out = questionary.select(
         "Where would you like to see the output?",
@@ -627,7 +662,7 @@ def periodic_variable_requests():
     isRequesting = True
 
     while (isRequesting):
-        print(20 * '#' + ' ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ' ' + 20 * '#')
+        print(40 * '#' + ' ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ' ' + 40 * '#')
         print("\nConnecting to " + host + "...\n")
 
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
@@ -636,7 +671,7 @@ def periodic_variable_requests():
 
             tags = ["tuned-frequency", "opt-setpoint"]
             try:
-                set_frequency_and_power_filter(ncc, interface_name, tags)
+                set_frequency_and_power_filter(ncc, interface_names, tags)
             except:
                 print(100*'*')
                 print("Unspecified error, unable to retrieve those data")
@@ -653,10 +688,10 @@ def periodic_variable_requests():
                 print(100*'*')
 
             print("\n\nGetting signal BER...\n")
-            ber_ranges = ['', '-mean']
+            ber_ranges = ['', '-lo', '-mean', '-hi']
 
             try:
-                set_ber_filter(ncc, logical_interfaces, ber_ranges)
+                set_ber_filter(ncc, logical_interfaces, ber_ranges, host)
             except:
                 print(100*'*')
                 print("Unspecified error, unable to retrieve those data")
@@ -666,7 +701,7 @@ def periodic_variable_requests():
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
             try:
-                set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges)
+                set_optical_channel_filter(ncc, logical_interfaces, channel_qualities, quality_ranges, host)
             except:
                 print(100*'*')
                 print("Unspecified error, unable to retrieve those data")
@@ -677,46 +712,11 @@ def periodic_variable_requests():
                 choices=[
                     'Yes',
                     'No',
-                    'Change host',
-                    'Change physical interface',
-                    'Change logical interface'
+                    'Change host'
                 ]).ask()
 
         if answer == 'Change host':
             host = choose_host()
-
-        if answer == 'Change physical interface':
-            interface_name = questionary.select(
-                "Please choose an interface:",
-                choices=[
-                    '1/2/n1',
-                    '1/2/n2',
-                    '1/2/c1',
-                    '1/2/c3'
-                ]).ask()
-
-        if answer == 'Change logical interface':
-            for interface_name in interface_names:
-                net_regex = '1/2/n.'
-                client_regex = '1/2/c.'
-                logical_interfaces = list()
-
-                if re.match(net_regex, interface_name) is not None:
-                    logical_interface = questionary.select(
-                        "Please choose a logical interface for " + interface_name + ":",
-                        choices=[
-                            'ot100',
-                            'ot100/odu4'
-                        ]).ask()
-                elif re.match(client_regex, interface_name) is not None:
-                    logical_interface = questionary.select(
-                        "Please choose a logical interface for " + interface_name + ":",
-                        choices=[
-                            'et100',
-                            'et100/odu4'
-                        ]).ask()
-                logical_interface = interface_name + '/' + logical_interface
-                logical_interfaces.append(logical_interface)
 
         if answer == 'No':
             isRequesting = False
