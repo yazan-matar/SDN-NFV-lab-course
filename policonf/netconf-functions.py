@@ -632,7 +632,7 @@ def periodic_requests():
 def periodic_variable_requests():
     """
         Periodically iterates all the previous requests, with the possibility
-        to change host, interface, or stopping the requests at each iteration
+        to change host or stopping the requests at each iteration
     """
 
     print("Starting...")
@@ -769,3 +769,4 @@ def periodic_variable_requests():
 
         if answer == 'No':
             isRequesting = False
+
