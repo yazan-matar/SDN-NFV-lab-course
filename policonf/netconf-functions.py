@@ -9,8 +9,7 @@ from ncclient.manager import connect as ncconnect
 # Other libraries
 import re
 from lxml import etree
-# from lxml.etree import tounicode
-from ncclient.xml_ import to_ele, to_xml
+from ncclient.xml_ import to_ele
 import questionary
 from getpass import getpass
 import time
@@ -55,6 +54,7 @@ def choose_host():
 # Function used to set the correct filter to retrieve frequency and power for a list of interfaces.
 # The function will print the retrieved value or a message saying that no match has been found
 def set_frequency_and_power_filter(ncc, interface_names, tags):
+    print(100 * "-")
     print("Getting frequency and/or power...")
 
     # cycle on all the interfaces
@@ -75,24 +75,28 @@ def set_frequency_and_power_filter(ncc, interface_names, tags):
         reply = ncc.get(filter=('subtree', interface_filter))
 
         # cycle through the tags to filter and print the requested information
+        print("")
+        print(100 * '*')
         for tag in tags:
             info_filter = """//*[name()=$tag]"""
             values = reply.data.xpath(info_filter, tag=tag)
             if len(values) != 0:
                 for value in values:
-                    print(100 * '*')
                     print(tag, "for", interface_name, "interface:", value.text)
-                    print(100 * '=')
+                    print(100 * '*')
             else:
                 # error message in case of no match after the xpath filter
                 print("No matching tag for <" + tag + ">")
+                print(100 * '*')
 
 
 # Function used to set the correct filter to retrieve transmitter and receiver power for a list of interfaces.
 def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
+    print(100 * "-")
     print('Getting optical receiver and/or transmitter power...')
 
     # cycle through the interfaces provided as input
+
     for interface_name in interface_names:
         # modify the filter according to a different syntax in interfaces c1 and c3
         # In c1 e c3 the tag 'lr-phys-optical' is called 'lr-physm-optical'
@@ -131,11 +135,12 @@ def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
 
         tags = list(unique_everseen(tags))  # removes duplicate values keeping the correct order
         # prints as output the filtered information
+        print("")
+        print(100 * '*')
         for tag in tags:
             time_interval = tag.getparent().getparent().getchildren()[0]
             for info in infos:
                 if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                    print(100 * '*')
                     print("Info for", time_interval.text + ":", tag.text)
                     print("Value:", tag.getnext().text)
                     print(100 * '*')
@@ -143,6 +148,7 @@ def set_tx_and_rx_filter(ncc, interface_names, power_types, power_ranges):
 
 # Function used to set the correct filter to retrieve BER for a list of interfaces.
 def set_ber_filter(ncc, interface_names, ber_ranges, host):
+    print(100 * "-")
     print('Getting bit error rate...')
 
     # TODO: penso che i dati del ber si trovino solo nelle interfacce client (c1 e c3), mentre
@@ -180,6 +186,7 @@ def set_ber_filter(ncc, interface_names, ber_ranges, host):
             result = ncc.dispatch(to_ele(rpc), source='running')
         except:
             # since not all the interfaces have information about BER we had to filter out some ncc.dispatch() errors
+            print("")
             print(100 * "*")
             print("Interface not found in ", host)
             print(100 * "*")
@@ -196,8 +203,6 @@ def set_ber_filter(ncc, interface_names, ber_ranges, host):
         tags = list()
         infos = list()
 
-        # TODO: Gestire caso in cui non trova ber (casi odu4), quindi mi restituisce una lista vuota
-
         for r in ber_ranges:
             info = prefix + ber + r
             infos.append(info)
@@ -205,11 +210,12 @@ def set_ber_filter(ncc, interface_names, ber_ranges, host):
             tags = tags + root.xpath(mt_filter)
 
         tags = list(unique_everseen(tags))  # remove duplicate values but keeps the original order
+        print("")
+        print(100 * "*")
         for tag in tags:
             time_interval = tag.getparent().getparent().getchildren()[0]
             for info in infos:
                 if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                    print(100 * '*')
                     print("Info for", time_interval.text + ":", tag.text)
                     print("Value:", tag.getnext().text)
                     print(100 * '*')
@@ -217,6 +223,8 @@ def set_ber_filter(ncc, interface_names, ber_ranges, host):
 
 # Function used to set the correct filter to retrieve optical channel quality metrics for a list of interfaces.
 def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_ranges, host):
+    print(100 * "-")
+    print('Getting optical channel metrics...')
     for interface_name in interface_names:
 
         print('\n\n' + 50 * '=' + '>', interface_name, '<' + 50 * '=' + '\n\n')
@@ -249,6 +257,7 @@ def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_
             result = ncc.dispatch(to_ele(rpc), source='running')
         except:
             # manage ncc.dispatch() exception if the requested interface is not present in the host
+            print("")
             print(100 * "*")
             print("Interface not found in ", host)
             print(100 * "*")
@@ -270,11 +279,12 @@ def set_optical_channel_filter(ncc, interface_names, channel_qualities, quality_
                 tags = tags + root.xpath(mt_filter)
 
         tags = list(unique_everseen(tags))  # remove duplicates but keeps the order
+        print("")
+        print(100 * "*")
         for tag in tags:
             time_interval = tag.getparent().getparent().getchildren()[0]
             for info in infos:
                 if tag.text == info and time_interval.text != 'acor-pmt:interval-24hour':
-                    print(100 * '*')
                     print("Info for", time_interval.text + ":", tag.text)
                     print("Value:", tag.getnext().text)
                     print(100 * '*')
@@ -408,7 +418,6 @@ def get_ber():
         set_ber_filter(ncc, interface_names, ber_ranges, host)
 
 
-# TODO: sistemare sta funzione
 @course_function(shortcut="3")
 def get_and_filter_optical_channels():
     """Get and SNR, q-factor and differential group delay."""
@@ -485,7 +494,7 @@ def get_interfaces():
         print(result)
 
 
-# ------------------------------------- PERIODIC FUNCTIONS -----------------------------------------#
+# ------------------------------------- PERIODIC FUNCTIONS ----------------------------------------- #
 @course_function(shortcut="5")
 def periodic_requests():
     """Periodically iterates all the previous requests"""
@@ -571,10 +580,11 @@ def periodic_requests():
 
         # set up the connection to the host
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
+            print(100 * "-")
             print("Retrieving data...")
 
 
-            print("Getting tuned-frequency and opt-setpoint...\n")
+            print("Getting tuned-frequency and opt-setpoint...")
             tags = ["tuned-frequency", "opt-setpoint"]
             try:
                 set_frequency_and_power_filter(ncc, interface_names, tags)
@@ -584,7 +594,7 @@ def periodic_requests():
                 print(100 * '*')
 
 
-            print("\n\nGetting transmitted and received power...\n")
+            print("\n\nGetting transmitted and received power...")
             power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
             power_ranges = ['', '-lo', '-mean', '-hi']
             try:
@@ -595,7 +605,7 @@ def periodic_requests():
                 print(100 * '*')
 
 
-            print("\n\nGetting signal BER...\n")
+            print("\n\nGetting signal BER...")
             ber_ranges = ['', '-lo', '-mean', '-hi']
             try:
                 set_ber_filter(ncc, logical_interfaces, ber_ranges, host)
@@ -605,7 +615,7 @@ def periodic_requests():
                 print(100 * '*')
 
 
-            print("\n\nGetting optical channel quality values...\n")
+            print("\n\nGetting optical channel quality values...")
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
             try:
@@ -703,19 +713,19 @@ def periodic_variable_requests():
         print("\nConnecting to " + host + "...\n")
 
         with ncconnect(host=host, port=port, username=username, password=password, hostkey_verify=False) as ncc:
-            print("Retrieving data...")
+            print(100 * "-")
+            print("\nRetrieving data...")
 
-            print("Getting tuned-frequency and opt-setpoint...\n")
+            print("Getting tuned-frequency and opt-setpoint...")
             tags = ["tuned-frequency", "opt-setpoint"]
             try:
                 set_frequency_and_power_filter(ncc, interface_names, tags)
             except:
-                print(100 * '*')
                 print("Unspecified error, unable to retrieve those data")
                 print(100 * '*')
 
 
-            print("\n\nGetting transmitted and received power...\n")
+            print("\n\nGetting transmitted and received power...")
             power_types = ['opt-rcv-pwr', 'opt-trmt-pwr']
             power_ranges = ['', '-lo', '-mean', '-hi']
             try:
@@ -726,7 +736,7 @@ def periodic_variable_requests():
                 print(100 * '*')
 
 
-            print("\n\nGetting signal BER...\n")
+            print("\n\nGetting signal BER...")
             ber_ranges = ['', '-lo', '-mean', '-hi']
             try:
                 set_ber_filter(ncc, logical_interfaces, ber_ranges, host)
@@ -736,7 +746,7 @@ def periodic_variable_requests():
                 print(100 * '*')
 
 
-            print("\n\nGetting optical channel quality values...\n")
+            print("\n\nGetting optical channel quality values...")
             channel_qualities = ['signal-to-noise-ratio', 'q-factor', 'differential-group-delay']
             quality_ranges = ['', '-lo', '-mean', '-hi']
             try:
