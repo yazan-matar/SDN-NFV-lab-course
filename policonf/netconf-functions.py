@@ -550,6 +550,11 @@ def periodic_requests():
 
     # time between two cycles of the function. The function will periodically reconnec to the selected device
     control_period = input("Insert time between two consecutive requests: ")
+    try:
+        control_period = int(control_period)
+    except:
+        print("Invalid control period")
+        return
 
     # decide if the outputs will be on console or on a specific file
     std_out = questionary.select(
